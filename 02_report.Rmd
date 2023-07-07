@@ -1,0 +1,280 @@
+---
+title: "Report"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r, include=FALSE}
+library(plotly)
+library(tidyverse)
+library(data.table)
+```
+# INTRODUCTION {.tabset}
+
+Welcome to this report showcasing my basic skills in using R. In this document, I will demonstrate my ability to perform simple variable manipulations, including adding, filtering, and deleting variables, as well as sorting data based on multiple variables, selecting random subsamples and summarizing statistics.
+
+Furthermore, I will exhibit my capability in creating various plots to effectively visualize data.
+
+Lastly, I will perform a logistic regression to obtain predicted probabilities for the target variable.
+
+## DATA MANIPULATION {.tabset}
+
+Here I will showcase fundamental operations with a data table.
+
+```{r}
+# Select a random subsample of size 10
+dt[sample(nrow(dt), size = 10), ]
+```
+
+```{r}
+# Filter desired rows using simple and more complex conditions
+
+# Filter: Education of customer is primary
+filtered.dt <- dt[dt$education == "primary", ]
+# Call new data table
+print(filtered.dt)
+```
+
+```{r}
+# Filter: Education of customer is primary or secondary, and balance is greater than 4000
+filtered.dt <- dt[(dt$education == "primary" |
+                     dt$education == "secondary") &
+                    dt$balance > 4000,]
+# Call new data table
+filtered.dt
+```
+
+
+```{r}
+# Drop unnecessary variables
+
+# Create a variable for columns we want to keep
+keep.cols = c("age", "job", "marital", "education", "balance", "y")
+# Create a new data table with only the desired columns
+drop.dt <- dt[, ..keep.cols]
+#drop.dt <- dt[, -c(16,15,14,13,12,11)]
+
+# Call new data table
+drop.dt
+```
+
+```{r}
+# Rename some variables;   
+
+# Rename variables education and y
+rename.dt <- copy(dt)
+setnames(rename.dt, old = "education", new = "edu")
+setnames(rename.dt, old = "y", new = "target_variable")
+
+# Call new data table
+rename.dt
+```
+
+```{r}
+# Calculate summarizing statistics for the full sample
+summary.stats <- summary(dt)
+summary.stats
+
+```
+
+```{r}
+# Calculate summarizing statistics by categorical variables
+aggregate.stats.balance <- aggregate(balance ~ education, data = dt, FUN = summary)
+aggregate.stats.balance
+
+```
+
+```{r}
+# Create new variables using simple transformation and custom functions;
+newvariables.dt <- copy(dt)
+
+newvariables.dt[, new_age := age * 2]
+newvariables.dt[, new_balance := sqrt(balance)]
+newvariables.dt[, new_duration := duration^2 + 5]
+
+newvariables.dt <- newvariables.dt[,c("new_age","new_balance","new_duration")]
+
+newvariables.dt
+```
+
+## DATA VISUALIZATION {.tabset}
+
+Here I will highlight essential operations using the plotly library.
+
+```{r, echo=FALSE}
+
+# Copy data table dt
+data <- copy(dt)
+
+# Create a variable text_info needed for function PlotScatter
+data[, text_info := paste0("Age: ", age,
+                         "<br>Balance: ", balance,
+                         "<br>Education: ", education)]
+
+# Create variables for function PlotScatter
+x.variable <- "age"
+y.variable <- "balance"
+color.variable <- "education"
+
+# Call function PlotScatter
+fig <- PlotScatter(data, x.variable, y.variable, color.variable)
+
+fig
+
+```
+
+```{r, echo=FALSE}
+# Copy data table 
+data <- copy(dt)
+# Create a new x.variable
+x.variable <- "job"
+# Call custom function PlotBar
+fig <- PlotBar(data, x.variable)
+fig
+
+```
+
+```{r, echo=FALSE}
+# Create new x and y variables
+x.variable <- "marital"
+y.variable <- "balance"
+
+# Call custom function PlotBox
+fig <- PlotBox(data, x.variable, y.variable)
+fig
+
+```
+
+```{r, echo=FALSE}
+# Create new x variable
+x.variable <- "education"
+
+# Call custom function PlotPie
+fig <- PlotPie(data, x.variable)
+fig
+
+```
+
+```{r, echo=FALSE}
+
+# Calculate total balance by job, marital, and education
+data.agg <- dt[, .(total_balance = sum(balance)), by = .(job, marital, education)]
+# Use the function taken from the stackoverflow
+sunburstDF <- as.sunburstDF(data.agg, value_column = "total_balance", add_root = TRUE)
+
+# The plotly sunburst chart does not work properly so I hard coded the fix
+sunburstDF1<-copy(sunburstDF)
+sunburstDF1[156,values:=values-1000]
+sunburstDF1[157,values:=values-300]
+sunburstDF1[171,values:=values-800]
+
+# Create the sunburst chart
+fig <- plot_ly(
+  data = sunburstDF1,
+  labels = ~labels,
+  parents = ~parents,
+  values = ~values,
+  ids = ~ids,
+  type = 'sunburst',
+  branchvalues = 'total'
+)
+
+# Add a title
+fig <- fig %>%
+  layout(title = "Sunburst of total balance by job, marital, and education",
+         plot_bgcolor = plot.bgcolor)
+
+# Display the sunburst chart
+fig
+
+```
+
+## MODELING TASK{.tabset}
+
+Here I will show my modeling skills. I will use the function glm() to create generalised linear model and predict() to compute probabilities with the probability threshold 0.5.
+
+```{r}
+# Set the seed to make sure our results can be replicated
+set.seed(123)
+# Remove unnecessary variables
+model.dt <- dt[,-c("day","month")]
+# Build a logistic regression model
+logit.model <- glm(y ~ . ,data = model.dt, family = "binomial")
+# Display a summary of the logistic regression model
+summary(logit.model)
+```
+
+```{r}
+# Make predictions
+logit.prob <- predict(logit.model, type='response')
+logit.pred <- rep('no',nrow(model.dt))
+logit.pred[logit.prob>0.5] = 'yes'
+
+# Create a confusion matrix
+table(logit.pred,model.dt$y)
+```
+By summing up the true positives and true negatives, we achieve a correct classification rate of 90.2% for our instances. The predicted probabilities for the target variable can be calculated as 66.4%, obtained by dividing the true positives by all positive predictions. 
+
+To validate the accuracy of our findings, we can employ the Cross Validation method.
+
+```{r}
+# Cross Validation
+
+# Split the data into training and testing sets
+train.index <- sample(nrow(model.dt), nrow(model.dt) * 0.8)
+train <- model.dt[train.index, ]
+test <- model.dt[-train.index, ]
+
+# Build the logistic regression model
+logit.model <- glm(y ~ ., data = train, family = "binomial")
+
+# Make predictions on the test data
+logit.prob <- predict(logit.model, newdata = test, type = "response")
+logit.pred <- rep('no',nrow(test))
+logit.pred[logit.prob>0.5] = 'yes'
+confusion.matrix<-table(logit.pred,test$y)
+confusion.matrix
+```
+
+```{r}
+# Evaluate the model performance
+accuracy <- sum(diag(confusion.matrix)) / sum(confusion.matrix)
+precision <- confusion.matrix[2, 2] / sum(confusion.matrix[, 2])
+recall <- confusion.matrix[2, 2] / sum(confusion.matrix[2, ])
+f1.score <- 2 * (precision * recall) / (precision + recall)
+
+# Create a table for the evaluation metrics
+metrics.table <- data.table(Metric = c("Accuracy", "Precision", "Recall", "F1 Score"),
+                            Value = c(accuracy, precision, recall, f1.score))
+metrics.table
+
+```
+Lastly, to further validate our results, we will utilize the k-fold Cross Validation technique.
+
+```{r}
+# k-fold Cross Validation
+
+
+# Set the number of folds for cross-validation
+k <- 5
+
+# Call a function to create list of confusion matrices
+confusion.matrices<- kfoldCrossValidation(model.dt, k)
+
+confusion.matrices
+```
+
+We can average them out to see the results.
+
+```{r}
+# k-fold Cross Validation metrics
+
+metrics.table<-CalculateAverageMetrics(confusion.matrices)
+
+metrics.table
+```
+
+
